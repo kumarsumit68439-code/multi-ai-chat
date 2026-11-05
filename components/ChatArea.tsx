@@ -13,7 +13,6 @@ import {
   MicOff,
   X,
   FileText,
-  Image as ImageIcon,
 } from "lucide-react";
 import { PROVIDERS, getModelById } from "@/lib/models";
 import clsx from "clsx";
@@ -56,7 +55,6 @@ export default function ChatArea({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -71,7 +69,8 @@ export default function ChatArea({
       const footer = `\n\`\`\``;
       const body =
         attached.textContent.length > MAX_TEXT_EXTRACT
-          ? attached.textContent.slice(0, MAX_TEXT_EXTRACT) + "\n...[truncated for length]"
+          ? attached.textContent.slice(0, MAX_TEXT_EXTRACT) +
+            "\n...[truncated for length]"
           : attached.textContent;
       content = (content ? content + header : header.slice(2)) + body + footer;
     } else if (attached) {
@@ -115,27 +114,41 @@ export default function ChatArea({
     }
     const isText =
       file.type.startsWith("text/") ||
-      /\.(txt|md|json|csv|js|ts|tsx|jsx|py|java|c|cpp|h|css|html|xml|yml|yaml|log|sql|sh|rs|go|rb|php)$/i.test(file.name);
+      /\.(txt|md|json|csv|js|ts|tsx|jsx|py|java|c|cpp|h|css|html|xml|yml|yaml|log|sql|sh|rs|go|rb|php)$/i.test(
+        file.name
+      );
     const entry: AttachedFile = {
       name: file.name,
       size: file.size,
       type: file.type || "application/octet-stream",
     };
-    if (file.type.startsWith("image/")) entry.preview = URL.createObjectURL(file);
+    if (file.type.startsWith("image/")) {
+      entry.preview = URL.createObjectURL(file);
+    }
     if (isText) {
-      try { entry.textContent = await file.text(); } catch { /* */ }
+      try {
+        entry.textContent = await file.text();
+      } catch {
+        /* */
+      }
     }
     setAttached(entry);
   };
 
   const stopVoice = useCallback(() => {
-    try { recognitionRef.current?.stop?.(); } catch { /* */ }
+    try {
+      recognitionRef.current?.stop?.();
+    } catch {
+      /* */
+    }
     setIsRecording(false);
   }, []);
 
   const startSpeechToText = () => {
     setRecordingError(null);
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
     if (!SR) {
       setRecordingError("Speech not supported in this browser");
       return;
@@ -157,7 +170,9 @@ export default function ChatArea({
       for (let i = event.resultIndex; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
       }
-      if (transcript) setInput((prev) => (prev ? prev + " " : "") + transcript.trim());
+      if (transcript) {
+        setInput((prev) => (prev ? prev + " " : "") + transcript.trim());
+      }
     };
     recognitionRef.current = recognition;
     recognition.start();
@@ -169,12 +184,20 @@ export default function ChatArea({
   };
 
   const currentModelInfo = getModelById(selectedModel);
-  const providerModels = PROVIDERS.find((p) => p.id === selectedProvider)?.models || [];
+  const providerModels =
+    PROVIDERS.find((p) => p.id === selectedProvider)?.models || [];
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden bg-[var(--background)]">
-      <header className="flex flex-col gap-1.5 px-3 pt-2 pb-2 sm:px-4 border-b border-[var(--border)] bg-[var(--sidebar)] shrink-0 z-20">
-        <div className="flex items-center gap-2 min-w-0">
+    <div
+      className="flex-1 w-full min-w-0 h-full overflow-hidden bg-[var(--background)]"
+      style={{
+        display: "grid",
+        gridTemplateRows: "auto 1fr auto",
+        gridTemplateColumns: "1fr",
+      }}
+    >
+      <header className="px-3 pt-2 pb-2 sm:px-4 border-b border-[var(--border)] bg-[var(--sidebar)]">
+        <div className="flex items-center gap-2 min-w-0 mb-1.5">
           <button
             onClick={onOpenSidebar}
             className="md:hidden p-2 -ml-1 rounded-xl hover:bg-white/10 shrink-0 touch-manipulation"
@@ -208,7 +231,9 @@ export default function ChatArea({
             className="flex-1 text-xs bg-[var(--card)] border border-[var(--border)] rounded-xl px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] min-w-0"
           >
             {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
             ))}
           </select>
           <select
@@ -218,7 +243,8 @@ export default function ChatArea({
           >
             {providerModels.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}{m.free ? " ✓" : ""}
+                {m.name}
+                {m.free ? " ✓" : ""}
               </option>
             ))}
           </select>
@@ -227,11 +253,11 @@ export default function ChatArea({
 
       <div
         ref={messagesContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-4 py-3 space-y-3"
-        style={{ WebkitOverflowScrolling: "touch" }}
+        className="overflow-y-auto overscroll-contain px-3 sm:px-4 py-3 space-y-3"
+        style={{ WebkitOverflowScrolling: "touch", minHeight: 0 }}
       >
         {(!chat || chat.messages.length === 0) && (
-          <div className="h-full min-h-[40vh] flex flex-col items-center justify-center text-center px-4">
+          <div className="flex flex-col items-center justify-center text-center px-4 py-16">
             <div className="w-12 h-12 rounded-2xl bg-[var(--primary)]/10 flex items-center justify-center mb-3">
               <Bot size={24} className="text-[var(--primary)]" />
             </div>
@@ -296,19 +322,28 @@ export default function ChatArea({
       </div>
 
       <div
-        className="px-3 pt-2 border-t border-[var(--border)] bg-[var(--sidebar)] shrink-0 z-20"
+        className="px-3 pt-2 border-t border-[var(--border)] bg-[var(--sidebar)]"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         {attached && (
           <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs">
             {attached.preview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={attached.preview} alt="" className="w-8 h-8 rounded object-cover" />
+              <img
+                src={attached.preview}
+                alt=""
+                className="w-8 h-8 rounded object-cover"
+              />
             ) : (
               <FileText size={16} className="text-[var(--muted)]" />
             )}
             <span className="flex-1 truncate">{attached.name}</span>
-            <button type="button" onClick={() => setAttached(null)} className="p-1 rounded-lg hover:bg-white/10" aria-label="Remove">
+            <button
+              type="button"
+              onClick={() => setAttached(null)}
+              className="p-1 rounded-lg hover:bg-white/10"
+              aria-label="Remove"
+            >
               <X size={14} />
             </button>
           </div>
@@ -319,7 +354,13 @@ export default function ChatArea({
         )}
 
         <form onSubmit={handleSubmit} className="flex items-end gap-1.5">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} accept="*/*" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            accept="*/*"
+          />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -361,7 +402,11 @@ export default function ChatArea({
             className="p-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed shrink-0 touch-manipulation"
             aria-label="Send"
           >
-            {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+            {isLoading ? (
+              <Loader2 size={20} className="animate-spin" />
+            ) : (
+              <Send size={20} />
+            )}
           </button>
         </form>
       </div>
