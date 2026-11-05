@@ -322,7 +322,7 @@ export default function ChatArea({
       </div>
 
       <div
-        className="px-3 pt-2 border-t border-[var(--border)] bg-[var(--sidebar)]"
+        className="px-2 pt-2 border-t border-[var(--border)] bg-[var(--sidebar)] overflow-x-hidden"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         {attached && (
@@ -353,7 +353,10 @@ export default function ChatArea({
           <p className="mb-1.5 text-xs text-red-400">{recordingError}</p>
         )}
 
-        <form onSubmit={handleSubmit} className="flex items-end gap-1.5">
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-center gap-1 w-full min-w-0"
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -365,24 +368,24 @@ export default function ChatArea({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="p-2.5 rounded-xl hover:bg-white/10 text-[var(--muted)] hover:text-white disabled:opacity-40 shrink-0 touch-manipulation"
+            className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-[var(--muted)] hover:text-white disabled:opacity-40 shrink-0 touch-manipulation"
             aria-label="Attach file"
           >
-            <Paperclip size={20} />
+            <Paperclip size={18} />
           </button>
           <button
             type="button"
             onClick={toggleVoice}
             disabled={isLoading}
             className={clsx(
-              "p-2.5 rounded-xl shrink-0 touch-manipulation transition-colors",
+              "h-10 w-10 flex items-center justify-center rounded-xl shrink-0 touch-manipulation transition-colors",
               isRecording
                 ? "bg-red-500/20 text-red-400"
                 : "hover:bg-white/10 text-[var(--muted)] hover:text-white disabled:opacity-40"
             )}
             aria-label={isRecording ? "Stop" : "Voice"}
           >
-            {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+            {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
           </button>
           <div className="flex-1 min-w-0">
             <textarea
@@ -392,20 +395,21 @@ export default function ChatArea({
               onKeyDown={handleKeyDown}
               placeholder={isRecording ? "Listening..." : "Message the AI..."}
               rows={1}
-              className="w-full resize-none bg-[var(--card)] border border-[var(--border)] rounded-2xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary)] max-h-[120px] placeholder:text-[var(--muted)]"
+              className="w-full resize-none bg-[var(--card)] border border-[var(--border)] rounded-2xl px-3 py-2.5 text-base leading-5 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] max-h-[120px] placeholder:text-[var(--muted)]"
               disabled={isLoading}
+              style={{ fontSize: 16 }}
             />
           </div>
           <button
             type="submit"
             disabled={(!input.trim() && !attached) || isLoading}
-            className="p-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed shrink-0 touch-manipulation"
+            className="h-10 w-10 flex items-center justify-center rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed shrink-0 touch-manipulation"
             aria-label="Send"
           >
             {isLoading ? (
-              <Loader2 size={20} className="animate-spin" />
+              <Loader2 size={18} className="animate-spin" />
             ) : (
-              <Send size={20} />
+              <Send size={18} />
             )}
           </button>
         </form>
