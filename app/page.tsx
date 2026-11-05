@@ -16,6 +16,7 @@ import {
   updateChatMeta,
   updateMessageContent,
 } from "@/lib/db";
+import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
 
 export default function Home() {
@@ -29,11 +30,13 @@ export default function Home() {
   const [selectedProvider, setSelectedProvider] = useState("groq");
   const [selectedModel, setSelectedModel] = useState("openai/gpt-oss-20b");
   const [chatsLoading, setChatsLoading] = useState(false);
+  const [instructions, setInstructions] = useState("");
 
   useEffect(() => {
     if (!user) {
       setChats([]);
       setCurrentChatId(null);
+      setInstructions("");
       return;
     }
 
@@ -48,9 +51,20 @@ export default function Home() {
         }
       })
       .finally(() => setChatsLoading(false));
+
+    const supabase = createClient();
+    supabase
+      .from("user_settings")
+      .select("instructions")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.instructions) setInstructions(data.instructions);
+      });
   }, [user]);
 
   const currentChat = chats.find((c) => c.id === currentChatId) || null;
+  const messageCount = chats.reduce((n, c) => n + c.messages.length, 0);
 
   const handleNewChat = useCallback(async () => {
     if (!user) return;
@@ -70,9 +84,7 @@ export default function Home() {
     async (id: string) => {
       await dbDeleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
-      if (currentChatId === id) {
-        setCurrentChatId(null);
-      }
+      if (currentChatId === id) setCurrentChatId(null);
     },
     [currentChatId]
   );
@@ -114,7 +126,6 @@ export default function Home() {
       model: selectedModel,
       provider: selectedProvider,
     });
-
     if (!userMsg) return;
 
     setChats((prev) =>
@@ -170,10 +181,7 @@ export default function Home() {
             content: m.content,
           })) || [];
 
-      const messages = [
-        ...history,
-        { role: "user" as const, content },
-      ];
+      const messages = [...history, { role: "user" as const, content }];
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -182,6 +190,7 @@ export default function Home() {
           messages,
           model: selectedModel,
           provider: selectedProvider,
+          systemInstructions: instructions,
         }),
       });
 
@@ -225,7 +234,7 @@ export default function Home() {
                 );
               }
             } catch {
-              // skip invalid JSON
+              /* skip */
             }
           }
         }
@@ -256,14 +265,17 @@ export default function Home() {
           })
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : "Failed to get response. Check API keys.";
       const errorMsg = await addMessage(chatId!, {
         role: "assistant",
-        content: `Error: ${error.message || "Failed to get response. Please check API keys in Vercel environment variables and try again."}`,
+        content: `Error: ${msg}`,
         model: selectedModel,
         provider: selectedProvider,
       });
-
       if (errorMsg) {
         setChats((prev) =>
           prev.map((c) => {
@@ -289,9 +301,7 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return <LoginModal />;
-  }
+  if (!user) return <LoginModal />;
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -316,7 +326,14 @@ export default function Home() {
         selectedProvider={selectedProvider}
         onModelChange={handleModelChange}
       />
-      <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Settings
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        instructions={instructions}
+        onInstructionsChange={setInstructions}
+        messageCount={messageCount}
+        chatCount={chats.length}
+      />
     </div>
   );
 }
