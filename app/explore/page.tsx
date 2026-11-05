@@ -27,7 +27,7 @@ export default function ExplorePage() {
     const matchSearch =
       !q ||
       m.name.toLowerCase().includes(q) ||
-      m.description.toLowerCase().includes(q) ||
+      m.description?.toLowerCase().includes(q) ||
       m.providerName.toLowerCase().includes(q) ||
       m.id.toLowerCase().includes(q);
     const matchFilter =
@@ -40,7 +40,6 @@ export default function ExplorePage() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-white">
-      {/* Header */}
       <div className="sticky top-0 z-10 bg-[var(--sidebar)] border-b border-[var(--border)] px-4 py-3">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
@@ -89,7 +88,6 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Providers section */}
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-6">
         {PROVIDERS.map((provider) => {
           const providerFiltered = filtered.filter((m) => m.provider === provider.id);
