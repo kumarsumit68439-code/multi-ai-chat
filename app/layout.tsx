@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
@@ -6,6 +6,14 @@ export const metadata: Metadata = {
   title: "Multi AI Chat - Free Models Hub",
   description:
     "Chat with free and paid AI models from Groq, OpenRouter, DeepSeek, Kimi, Grok and more. Real-time streaming responses.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
