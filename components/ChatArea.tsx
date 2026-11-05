@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { PROVIDERS, getModelById } from "@/lib/models";
 import clsx from "clsx";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_TEXT_EXTRACT = 200_000;
@@ -128,19 +129,13 @@ export default function ChatArea({
     if (isText) {
       try {
         entry.textContent = await file.text();
-      } catch {
-        /* */
-      }
+      } catch { /* */ }
     }
     setAttached(entry);
   };
 
   const stopVoice = useCallback(() => {
-    try {
-      recognitionRef.current?.stop?.();
-    } catch {
-      /* */
-    }
+    try { recognitionRef.current?.stop?.(); } catch { /* */ }
     setIsRecording(false);
   }, []);
 
@@ -190,11 +185,7 @@ export default function ChatArea({
   return (
     <div
       className="flex-1 w-full min-w-0 h-full overflow-hidden bg-[var(--background)]"
-      style={{
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-        gridTemplateColumns: "1fr",
-      }}
+      style={{ display: "grid", gridTemplateRows: "auto 1fr auto", gridTemplateColumns: "1fr" }}
     >
       <header className="px-3 pt-2 pb-2 sm:px-4 border-b border-[var(--border)] bg-[var(--sidebar)]">
         <div className="flex items-center gap-2 min-w-0 mb-1.5">
@@ -231,9 +222,7 @@ export default function ChatArea({
             className="flex-1 text-xs bg-[var(--card)] border border-[var(--border)] rounded-xl px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] min-w-0"
           >
             {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <select
@@ -243,8 +232,7 @@ export default function ChatArea({
           >
             {providerModels.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
-                {m.free ? " ✓" : ""}
+                {m.name}{m.free ? " ✓" : ""}
               </option>
             ))}
           </select>
@@ -289,11 +277,15 @@ export default function ChatArea({
                   : "bg-[var(--card)] border border-[var(--border)]"
               )}
             >
-              <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                {msg.content || "..."}
-              </p>
+              {msg.role === "assistant" ? (
+                <MarkdownRenderer content={msg.content || "..."} />
+              ) : (
+                <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                  {msg.content}
+                </p>
+              )}
               {msg.role === "assistant" && msg.model && (
-                <p className="text-[10px] text-[var(--muted)] mt-1">
+                <p className="text-[10px] text-[var(--muted)] mt-2">
                   {msg.provider} · {msg.model.split("/").pop()}
                 </p>
               )}
@@ -329,11 +321,7 @@ export default function ChatArea({
           <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs">
             {attached.preview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={attached.preview}
-                alt=""
-                className="w-8 h-8 rounded object-cover"
-              />
+              <img src={attached.preview} alt="" className="w-8 h-8 rounded object-cover" />
             ) : (
               <FileText size={16} className="text-[var(--muted)]" />
             )}
@@ -353,10 +341,7 @@ export default function ChatArea({
           <p className="mb-1.5 text-xs text-red-400">{recordingError}</p>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex items-center gap-1 w-full min-w-0"
-        >
+        <form onSubmit={handleSubmit} className="flex items-center gap-1 w-full min-w-0">
           <input
             ref={fileInputRef}
             type="file"

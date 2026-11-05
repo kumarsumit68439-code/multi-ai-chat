@@ -1,8 +1,9 @@
 "use client";
 
 import { Chat } from "@/types";
-import { Plus, MessageSquare, Trash2, Settings, X, LogOut } from "lucide-react";
+import { Plus, MessageSquare, Trash2, Settings, X, LogOut, Compass } from "lucide-react";
 import clsx from "clsx";
+import Link from "next/link";
 
 interface SidebarProps {
   chats: Chat[];
@@ -56,17 +57,22 @@ export default function Sidebar({
           </button>
         </div>
 
-        <div className="p-3">
+        <div className="p-3 flex gap-2">
           <button
-            onClick={() => {
-              onNewChat();
-              onClose();
-            }}
-            className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-medium transition-colors touch-manipulation text-sm sm:text-base"
+            onClick={() => { onNewChat(); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-medium transition-colors touch-manipulation text-sm"
           >
             <Plus size={18} />
             New Chat
           </button>
+          <Link
+            href="/explore"
+            onClick={onClose}
+            className="flex items-center justify-center gap-1 px-3 py-3 rounded-xl bg-[var(--card)] border border-[var(--border)] hover:bg-white/10 transition-colors text-xs text-[var(--muted)] hover:text-white touch-manipulation"
+            title="Explore Models"
+          >
+            <Compass size={16} />
+          </Link>
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-2 sm:px-3 pb-3 space-y-0.5">
@@ -87,10 +93,7 @@ export default function Sidebar({
                     ? "bg-white/10"
                     : "hover:bg-white/5 active:bg-white/10"
                 )}
-                onClick={() => {
-                  onSelectChat(chat.id);
-                  onClose();
-                }}
+                onClick={() => { onSelectChat(chat.id); onClose(); }}
               >
                 <MessageSquare size={16} className="shrink-0 text-[var(--muted)]" />
                 <div className="flex-1 min-w-0">
@@ -100,10 +103,7 @@ export default function Sidebar({
                   </p>
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteChat(chat.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }}
                   className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-opacity touch-manipulation"
                   aria-label="Delete chat"
                 >
@@ -115,15 +115,10 @@ export default function Sidebar({
 
         <div className="p-3 border-t border-[var(--border)] space-y-1 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {userEmail && (
-            <p className="px-3 py-1 text-xs text-[var(--muted)] truncate">
-              {userEmail}
-            </p>
+            <p className="px-3 py-1 text-xs text-[var(--muted)] truncate">{userEmail}</p>
           )}
           <button
-            onClick={() => {
-              onOpenSettings();
-              onClose();
-            }}
+            onClick={() => { onOpenSettings(); onClose(); }}
             className="w-full flex items-center gap-2 px-3 py-3 rounded-xl hover:bg-white/5 transition-colors text-sm touch-manipulation"
           >
             <Settings size={16} />
