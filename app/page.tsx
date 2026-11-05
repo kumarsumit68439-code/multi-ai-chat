@@ -17,6 +17,7 @@ import {
   updateMessageContent,
   setConnectorStatus,
 } from "@/lib/db";
+import { getConnectorById } from "@/lib/connectors";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
 
@@ -64,18 +65,19 @@ export default function Home() {
       });
   }, [user]);
 
-  // After Google OAuth for a connector, mark it connected and open Settings
+  // After real Supabase OAuth for a connector, mark connected with provider + scopes
   useEffect(() => {
     if (!user || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const connectorId = params.get("connectors");
     if (!connectorId) return;
 
+    const meta = getConnectorById(connectorId);
     setConnectorStatus(user.id, connectorId, true, {
-      provider: "google",
+      provider: meta?.oauthProvider || "oauth",
+      scopes: meta?.oauthScopes,
     }).then(() => {
       setSettingsOpen(true);
-      // Clean URL without reload
       const url = new URL(window.location.href);
       url.searchParams.delete("connectors");
       window.history.replaceState({}, "", url.pathname + url.search);
