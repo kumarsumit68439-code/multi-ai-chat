@@ -7,7 +7,7 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { User, Session } from "@supabase/supabase-js";
+import { User, Session, Provider } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 interface AuthContextType {
@@ -18,6 +18,9 @@ interface AuthContextType {
   signUpWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<void>;
   signInWithDiscord: () => Promise<void>;
+  signInWithGithub: () => Promise<void>;
+  signInWithLinkedIn: () => Promise<void>;
+  signInWithNotion: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -57,22 +60,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signInWithGoogle = async () => {
+  const oauthSignIn = async (provider: Provider) => {
     await supabase.auth.signInWithOAuth({
-      provider: "google",
+      provider,
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
   };
 
-  const signInWithDiscord = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "discord",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+  const signInWithGoogle = async () => oauthSignIn("google");
+  const signInWithDiscord = async () => oauthSignIn("discord");
+  const signInWithGithub = async () => oauthSignIn("github");
+  const signInWithLinkedIn = async () => oauthSignIn("linkedin_oidc");
+  // Notion is not a built-in Supabase provider; attempt as custom if configured
+  const signInWithNotion = async () => {
+    try {
+      await oauthSignIn("notion" as Provider);
+    } catch {
+      console.warn("Notion OAuth is not enabled in Supabase. Enable it in Authentication → Providers.");
+    }
   };
 
   const signOut = async () => {
@@ -89,6 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithEmail,
         signInWithGoogle,
         signInWithDiscord,
+        signInWithGithub,
+        signInWithLinkedIn,
+        signInWithNotion,
         signOut,
       }}
     >
