@@ -15,6 +15,7 @@ import {
   updateChatTitle,
   updateChatMeta,
   updateMessageContent,
+  setConnectorStatus,
 } from "@/lib/db";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -61,6 +62,24 @@ export default function Home() {
       .then(({ data }) => {
         if (data?.instructions) setInstructions(data.instructions);
       });
+  }, [user]);
+
+  // After Google OAuth for a connector, mark it connected and open Settings
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connectorId = params.get("connectors");
+    if (!connectorId) return;
+
+    setConnectorStatus(user.id, connectorId, true, {
+      provider: "google",
+    }).then(() => {
+      setSettingsOpen(true);
+      // Clean URL without reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connectors");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    });
   }, [user]);
 
   const currentChat = chats.find((c) => c.id === currentChatId) || null;
