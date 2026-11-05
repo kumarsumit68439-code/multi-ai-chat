@@ -29,6 +29,7 @@ import {
   UserConnector,
 } from "@/lib/db";
 import clsx from "clsx";
+import type { Provider } from "@supabase/supabase-js";
 
 interface SettingsProps {
   isOpen: boolean;
@@ -61,13 +62,13 @@ export default function Settings({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Connectors state
   const [connectorStatuses, setConnectorStatuses] = useState<
     Record<string, UserConnector>
   >({});
   const [connectorsLoading, setConnectorsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalInstructions(instructions);
@@ -81,7 +82,6 @@ export default function Settings({
       .finally(() => setConnectorsLoading(false));
   }, [isOpen, user, tab]);
 
-  // MUST be before any early return (Rules of Hooks)
   const filteredConnectors = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return CONNECTORS;
@@ -115,47 +115,62 @@ export default function Settings({
     }
   };
 
+  /** Real OAuth via Supabase Auth (Google / GitHub / Azure) */
   const handleConnect = async (connector: Connector) => {
     if (!user) return;
     setConnectingId(connector.id);
+    setConnectError(null);
 
     try {
-      if (connector.supportsGoogleOAuth && connector.googleScopes?.length) {
+      if (connector.oauthProvider) {
         const supabase = createClient();
-        const scopes = [
-          "email",
-          "profile",
-          ...connector.googleScopes,
-        ].join(" ");
+        const provider = connector.oauthProvider as Provider;
 
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
+        const baseScopes =
+          provider === "google"
+            ? ["email", "profile"]
+            : provider === "github"
+              ? ["read:user", "user:email"]
+              : [];
+
+        const scopes = [...baseScopes, ...(connector.oauthScopes || [])].join(
+          " "
+        );
+
+        const queryParams: Record<string, string> = {};
+        if (provider === "google") {
+          queryParams.access_type = "offline";
+          queryParams.prompt = "consent";
+        }
+
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
           options: {
             redirectTo: `${window.location.origin}/auth/callback?next=/?connectors=${connector.id}`,
-            scopes,
-            queryParams: {
-              access_type: "offline",
-              prompt: "consent",
-            },
+            scopes: scopes || undefined,
+            queryParams:
+              Object.keys(queryParams).length > 0 ? queryParams : undefined,
           },
         });
+
+        if (error) {
+          setConnectError(
+            error.message ||
+              `OAuth failed. Enable ${provider} in Supabase → Authentication → Providers.`
+          );
+          return;
+        }
+        // Browser redirects to provider
         return;
       }
 
-      const ok = await setConnectorStatus(user.id, connector.id, true, {
-        provider: "manual",
-      });
-      if (ok) {
-        setConnectorStatuses((prev) => ({
-          ...prev,
-          [connector.id]: {
-            connector_id: connector.id,
-            connected: true,
-            provider: "manual",
-            updated_at: new Date().toISOString(),
-          },
-        }));
-      }
+      // No Supabase OAuth provider for this service yet
+      setConnectError(
+        `${connector.name} needs its own OAuth app. Real auth is available for Google, GitHub, and Microsoft (Azure) via Supabase.`
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Connection failed";
+      setConnectError(msg);
     } finally {
       setConnectingId(null);
     }
@@ -164,6 +179,7 @@ export default function Settings({
   const handleDisconnect = async (connectorId: string) => {
     if (!user) return;
     setConnectingId(connectorId);
+    setConnectError(null);
     try {
       const ok = await setConnectorStatus(user.id, connectorId, false);
       if (ok) {
@@ -179,6 +195,15 @@ export default function Settings({
     } finally {
       setConnectingId(null);
     }
+  };
+
+  const oauthLabel = (c: Connector) => {
+    if (!c.oauthProvider) return null;
+    if (c.oauthProvider === "google") return "Real OAuth · Google via Supabase";
+    if (c.oauthProvider === "github") return "Real OAuth · GitHub via Supabase";
+    if (c.oauthProvider === "azure")
+      return "Real OAuth · Microsoft via Supabase";
+    return `Real OAuth · ${c.oauthProvider}`;
   };
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -304,10 +329,16 @@ export default function Settings({
           {tab === "connectors" && (
             <div className="space-y-4">
               <p className="text-sm text-[var(--muted)]">
-                Connect apps and services so the AI can search, read, and take
-                actions with your permission. Google services use Supabase
-                Google OAuth with extra scopes.
+                Connect apps with real OAuth (Supabase Auth). Google, GitHub, and
+                Microsoft open the real provider login and request the listed
+                scopes — same pattern as ChatGPT / Claude connectors.
               </p>
+
+              {connectError && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  {connectError}
+                </div>
+              )}
 
               <div className="relative">
                 <Search
@@ -363,6 +394,7 @@ export default function Settings({
                           const status = connectorStatuses[c.id];
                           const isConnected = !!status?.connected;
                           const isBusy = connectingId === c.id;
+                          const label = oauthLabel(c);
                           return (
                             <div
                               key={c.id}
@@ -375,9 +407,9 @@ export default function Settings({
                                 <p className="text-[11px] text-[var(--muted)] truncate">
                                   {c.description}
                                 </p>
-                                {c.supportsGoogleOAuth && (
-                                  <p className="text-[10px] text-green-500/80 mt-0.5">
-                                    Google OAuth via Supabase
+                                {label && (
+                                  <p className="text-[10px] text-green-500/90 mt-0.5">
+                                    {label}
                                   </p>
                                 )}
                               </div>
@@ -430,14 +462,23 @@ export default function Settings({
               )}
 
               <div className="rounded-xl border border-[var(--border)] p-3 text-xs text-[var(--muted)] space-y-1">
-                <p className="font-medium text-white/80">Setup notes</p>
+                <p className="font-medium text-white/80">Real OAuth (Supabase)</p>
                 <p>
-                  • Gmail, Google Calendar, Google Drive & BigQuery use Supabase
-                  Google OAuth with extra scopes.
+                  • <strong className="text-white/70">Google</strong>: Gmail,
+                  Calendar, Drive, BigQuery — enable Google provider + scopes in
+                  Supabase & Google Cloud.
                 </p>
                 <p>
-                  • Other services need their own OAuth apps; Connect currently
-                  records status for scaffolding.
+                  • <strong className="text-white/70">GitHub</strong>: enable
+                  GitHub provider in Supabase Authentication.
+                </p>
+                <p>
+                  • <strong className="text-white/70">Microsoft</strong>: Outlook
+                  / Teams — enable Azure provider in Supabase.
+                </p>
+                <p>
+                  • Other apps need their own OAuth client; Connect will show an
+                  error until that is set up.
                 </p>
               </div>
             </div>
@@ -509,17 +550,6 @@ export default function Settings({
                   <p className="text-xs text-[var(--muted)] mt-1">Messages</p>
                 </div>
               </div>
-              <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm">
-                <h3 className="font-medium">Credits note</h3>
-                <p className="text-[var(--muted)]">
-                  Groq & OpenRouter free models: limited by each provider daily
-                  rate limits (not billed here).
-                </p>
-                <p className="text-[var(--muted)]">
-                  DeepSeek / Kimi / Grok paid models: credits are charged on the
-                  provider side when you use your API key.
-                </p>
-              </div>
             </div>
           )}
 
@@ -541,12 +571,6 @@ export default function Settings({
                     Light (soon)
                   </button>
                 </div>
-              </div>
-              <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--muted)]">
-                <p>Default model is selected from the chat header.</p>
-                <p>
-                  Custom instructions apply globally from the Instructions tab.
-                </p>
               </div>
             </div>
           )}
