@@ -41,7 +41,7 @@ export default function Sidebar({
 
       <aside
         className={clsx(
-          "fixed md:static inset-y-0 left-0 z-50 w-[85vw] max-w-[300px] md:w-72 lg:w-80 bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col transition-transform duration-200 ease-out",
+          "fixed md:static inset-y-0 left-0 z-50 h-full w-[85vw] max-w-[300px] md:w-72 lg:w-80 bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col transition-transform duration-200 ease-out overflow-hidden",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >

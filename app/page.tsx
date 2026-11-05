@@ -295,7 +295,7 @@ export default function Home() {
 
   if (authLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[var(--background)]">
+      <div className="h-[100dvh] h-screen flex items-center justify-center bg-[var(--background)] overflow-hidden">
         <Loader2 className="animate-spin text-[var(--muted)]" size={32} />
       </div>
     );
@@ -304,7 +304,7 @@ export default function Home() {
   if (!user) return <LoginModal />;
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="h-[100dvh] h-screen w-full flex overflow-hidden fixed inset-0">
       <Sidebar
         chats={chats}
         currentChatId={currentChatId}
