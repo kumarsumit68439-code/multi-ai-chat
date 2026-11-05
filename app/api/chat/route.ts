@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProviderById } from "@/lib/models";
+import { getProviderById, shouldUseOpenRouter } from "@/lib/models";
 
 export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, model, provider, stream = true } = body;
+    const { messages, model, provider, stream = true, systemInstructions } = body;
 
     if (!messages || !model || !provider) {
       return NextResponse.json(
@@ -15,7 +15,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const providerConfig = getProviderById(provider);
+    const useOpenRouter = shouldUseOpenRouter(provider, model);
+    const effectiveProvider = useOpenRouter ? "openrouter" : provider;
+    const providerConfig = getProviderById(effectiveProvider);
+
     if (!providerConfig) {
       return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
     }
@@ -35,18 +38,32 @@ export async function POST(req: NextRequest) {
       Authorization: `Bearer ${apiKey}`,
     };
 
-    // OpenRouter specific headers
-    if (provider === "openrouter") {
-      headers["HTTP-Referer"] = process.env.NEXT_PUBLIC_SITE_URL || "https://multi-ai-chat.vercel.app";
+    if (effectiveProvider === "openrouter") {
+      headers["HTTP-Referer"] =
+        process.env.NEXT_PUBLIC_SITE_URL || "https://multi-ai-chat.vercel.app";
       headers["X-Title"] = "Multi AI Chat";
     }
 
-    const payload: any = {
-      model,
-      messages: messages.map((m: any) => ({
+    const formattedMessages: { role: string; content: string }[] = [];
+
+    if (systemInstructions && String(systemInstructions).trim()) {
+      formattedMessages.push({
+        role: "system",
+        content: String(systemInstructions).trim(),
+      });
+    }
+
+    for (const m of messages) {
+      if (m.role === "system") continue;
+      formattedMessages.push({
         role: m.role,
         content: m.content,
-      })),
+      });
+    }
+
+    const payload: Record<string, unknown> = {
+      model,
+      messages: formattedMessages,
       stream,
       temperature: 0.7,
       max_tokens: 4096,
@@ -63,15 +80,18 @@ export async function POST(req: NextRequest) {
       let errorMessage = `Provider error: ${response.status}`;
       try {
         const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.error?.message || errorJson.message || errorText;
+        errorMessage =
+          errorJson.error?.message || errorJson.message || errorText;
       } catch {
         errorMessage = errorText || errorMessage;
       }
-      return NextResponse.json({ error: errorMessage }, { status: response.status });
+      return NextResponse.json(
+        { error: errorMessage },
+        { status: response.status }
+      );
     }
 
     if (stream) {
-      // Return the stream directly
       return new Response(response.body, {
         headers: {
           "Content-Type": "text/event-stream",
@@ -83,11 +103,10 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
     console.error("Chat API error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
