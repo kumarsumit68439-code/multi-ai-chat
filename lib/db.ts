@@ -141,3 +141,69 @@ export async function updateMessageContent(messageId: string, content: string) {
     .update({ content })
     .eq("id", messageId);
 }
+
+/** Connected connector status for a user */
+export interface UserConnector {
+  connector_id: string;
+  connected: boolean;
+  provider?: string;
+  scopes?: string[];
+  updated_at?: string;
+}
+
+/**
+ * Fetch all connector connection statuses for a user.
+ * Requires table: user_connectors (
+ *   user_id uuid references auth.users,
+ *   connector_id text,
+ *   connected boolean default false,
+ *   provider text,
+ *   scopes text[],
+ *   updated_at timestamptz default now(),
+ *   primary key (user_id, connector_id)
+ * )
+ */
+export async function fetchUserConnectors(
+  userId: string
+): Promise<Record<string, UserConnector>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("user_connectors")
+    .select("connector_id, connected, provider, scopes, updated_at")
+    .eq("user_id", userId);
+
+  if (error || !data) return {};
+
+  const map: Record<string, UserConnector> = {};
+  for (const row of data) {
+    map[row.connector_id] = {
+      connector_id: row.connector_id,
+      connected: !!row.connected,
+      provider: row.provider ?? undefined,
+      scopes: row.scopes ?? undefined,
+      updated_at: row.updated_at ?? undefined,
+    };
+  }
+  return map;
+}
+
+export async function setConnectorStatus(
+  userId: string,
+  connectorId: string,
+  connected: boolean,
+  extra?: { provider?: string; scopes?: string[] }
+): Promise<boolean> {
+  const supabase = createClient();
+  const { error } = await supabase.from("user_connectors").upsert(
+    {
+      user_id: userId,
+      connector_id: connectorId,
+      connected,
+      provider: extra?.provider ?? null,
+      scopes: extra?.scopes ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,connector_id" }
+  );
+  return !error;
+}
