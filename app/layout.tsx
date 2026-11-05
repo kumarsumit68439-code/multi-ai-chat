@@ -15,8 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full overflow-hidden">
-      <body className="antialiased overflow-hidden h-full">
-        <AuthProvider>{children}</AuthProvider>
+      <body className="h-full overflow-hidden antialiased">
+        <AuthProvider>
+          <div className="h-full w-full overflow-hidden">{children}</div>
+        </AuthProvider>
       </body>
     </html>
   );
