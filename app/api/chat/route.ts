@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProviderById, shouldUseOpenRouter } from "@/lib/models";
+import { hasConnected } from "@/lib/connectors/store";
+import { runAgentStream } from "@/lib/connectors/agent";
 
 export const runtime = "edge";
 
@@ -58,6 +60,22 @@ export async function POST(req: NextRequest) {
       formattedMessages.push({
         role: m.role,
         content: m.content,
+      });
+    }
+
+    // Connectors: when the signed-in user has connected apps, run the tool-calling loop.
+    let useConnectors = false;
+    try {
+      useConnectors = body.useConnectors !== false && (await hasConnected());
+    } catch {
+      useConnectors = false;
+    }
+    if (useConnectors) {
+      return runAgentStream({
+        baseUrl: providerConfig.baseUrl,
+        headers,
+        model,
+        messages: formattedMessages,
       });
     }
 

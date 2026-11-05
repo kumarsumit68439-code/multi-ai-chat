@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Bot, User, BarChart3, Palette, FileText, Check } from "lucide-react";
+import { X, Bot, User, BarChart3, Palette, FileText, Check, Plug } from "lucide-react";
 import { PROVIDERS } from "@/lib/models";
 import { useAuth } from "@/lib/auth-context";
 import { createClient } from "@/lib/supabase/client";
+import ConnectorsPanel from "@/components/ConnectorsPanel";
 import clsx from "clsx";
 
 interface SettingsProps {
@@ -16,7 +17,7 @@ interface SettingsProps {
   chatCount?: number;
 }
 
-type Tab = "models" | "instructions" | "account" | "usage" | "customize";
+type Tab = "models" | "connectors" | "instructions" | "account" | "usage" | "customize";
 
 export default function Settings({
   isOpen,
@@ -60,6 +61,7 @@ export default function Settings({
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "models", label: "AI Models", icon: <Bot size={16} /> },
+    { id: "connectors", label: "Connectors", icon: <Plug size={16} /> },
     { id: "instructions", label: "Instructions", icon: <FileText size={16} /> },
     { id: "account", label: "Account", icon: <User size={16} /> },
     { id: "usage", label: "Usage", icon: <BarChart3 size={16} /> },
@@ -132,6 +134,8 @@ export default function Settings({
               ))}
             </div>
           )}
+
+          {tab === "connectors" && <ConnectorsPanel />}
 
           {tab === "instructions" && (
             <div className="space-y-3">
