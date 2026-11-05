@@ -81,6 +81,18 @@ export default function Settings({
       .finally(() => setConnectorsLoading(false));
   }, [isOpen, user, tab]);
 
+  // MUST be before any early return (Rules of Hooks)
+  const filteredConnectors = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return CONNECTORS;
+    return CONNECTORS.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
   if (!isOpen) return null;
 
   const saveInstructions = async () => {
@@ -109,7 +121,6 @@ export default function Settings({
 
     try {
       if (connector.supportsGoogleOAuth && connector.googleScopes?.length) {
-        // Use Supabase Google OAuth with extra scopes for this connector
         const supabase = createClient();
         const scopes = [
           "email",
@@ -128,12 +139,9 @@ export default function Settings({
             },
           },
         });
-        // User will be redirected; on return we can mark connected
         return;
       }
 
-      // For non-Google connectors: mark as connected (scaffolding).
-      // Real OAuth for these requires separate provider apps.
       const ok = await setConnectorStatus(user.id, connector.id, true, {
         provider: "manual",
       });
@@ -172,17 +180,6 @@ export default function Settings({
       setConnectingId(null);
     }
   };
-
-  const filteredConnectors = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return CONNECTORS;
-    return CONNECTORS.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "models", label: "AI Models", icon: <Bot size={16} /> },
@@ -312,7 +309,6 @@ export default function Settings({
                 Google OAuth with extra scopes.
               </p>
 
-              {/* Search */}
               <div className="relative">
                 <Search
                   size={16}
@@ -327,7 +323,6 @@ export default function Settings({
                 />
               </div>
 
-              {/* Custom connector card */}
               <div className="rounded-xl border border-dashed border-[var(--border)] p-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
@@ -439,10 +434,6 @@ export default function Settings({
                 <p>
                   • Gmail, Google Calendar, Google Drive & BigQuery use Supabase
                   Google OAuth with extra scopes.
-                </p>
-                <p>
-                  • Create table <code className="text-[10px]">user_connectors</code>{" "}
-                  in Supabase (see README / SQL below).
                 </p>
                 <p>
                   • Other services need their own OAuth apps; Connect currently
