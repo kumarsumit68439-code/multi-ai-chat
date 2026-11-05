@@ -9,16 +9,19 @@ export type ConnectorCategory =
   | "advertising"
   | "custom";
 
+/** Supabase Auth provider used for real OAuth */
+export type OauthProvider = "google" | "github" | "azure" | "discord";
+
 export interface Connector {
   id: string;
   name: string;
   description: string;
   category: ConnectorCategory;
   icon?: string;
-  /** Services that can use Google OAuth via Supabase */
-  googleScopes?: string[];
-  /** Whether this connector can currently initiate real OAuth via Supabase Google */
-  supportsGoogleOAuth?: boolean;
+  /** Real OAuth via Supabase Auth provider */
+  oauthProvider?: OauthProvider;
+  /** Extra OAuth scopes requested (space-joined by the client) */
+  oauthScopes?: string[];
   /** Optional external MCP endpoint hint */
   mcpHint?: string;
 }
@@ -36,8 +39,8 @@ export const CONNECTORS: Connector[] = [
     name: "Gmail",
     description: "Search and draft emails",
     category: "featured",
-    supportsGoogleOAuth: true,
-    googleScopes: [
+    oauthProvider: "google",
+    oauthScopes: [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.compose",
       "https://www.googleapis.com/auth/gmail.modify",
@@ -48,8 +51,8 @@ export const CONNECTORS: Connector[] = [
     name: "Google Calendar",
     description: "Check your schedule",
     category: "featured",
-    supportsGoogleOAuth: true,
-    googleScopes: [
+    oauthProvider: "google",
+    oauthScopes: [
       "https://www.googleapis.com/auth/calendar.readonly",
       "https://www.googleapis.com/auth/calendar.events",
     ],
@@ -59,8 +62,8 @@ export const CONNECTORS: Connector[] = [
     name: "Google Drive",
     description: "Search files and docs",
     category: "featured",
-    supportsGoogleOAuth: true,
-    googleScopes: [
+    oauthProvider: "google",
+    oauthScopes: [
       "https://www.googleapis.com/auth/drive.readonly",
       "https://www.googleapis.com/auth/drive.file",
     ],
@@ -114,12 +117,21 @@ export const CONNECTORS: Connector[] = [
     name: "Outlook",
     description: "Search and draft emails",
     category: "productivity",
+    oauthProvider: "azure",
+    oauthScopes: [
+      "Mail.Read",
+      "Mail.ReadWrite",
+      "Mail.Send",
+      "User.Read",
+    ],
   },
   {
     id: "outlook-calendar",
     name: "Outlook Calendar",
     description: "Check your schedule",
     category: "productivity",
+    oauthProvider: "azure",
+    oauthScopes: ["Calendars.Read", "Calendars.ReadWrite", "User.Read"],
   },
   {
     id: "asana",
@@ -168,6 +180,8 @@ export const CONNECTORS: Connector[] = [
     name: "Microsoft Teams",
     description: "Search chats and channels",
     category: "productivity",
+    oauthProvider: "azure",
+    oauthScopes: ["Chat.Read", "ChannelMessage.Read.All", "User.Read"],
   },
   {
     id: "ringcentral-chat",
@@ -267,6 +281,8 @@ export const CONNECTORS: Connector[] = [
     name: "GitHub",
     description: "Search code, repos, issues and more",
     category: "developer",
+    oauthProvider: "github",
+    oauthScopes: ["repo", "read:user", "user:email", "read:org"],
   },
   {
     id: "netlify",
@@ -333,8 +349,8 @@ export const CONNECTORS: Connector[] = [
     name: "Google Cloud BigQuery",
     description: "Query BigQuery datasets",
     category: "analytics",
-    supportsGoogleOAuth: true,
-    googleScopes: ["https://www.googleapis.com/auth/bigquery"],
+    oauthProvider: "google",
+    oauthScopes: ["https://www.googleapis.com/auth/bigquery"],
   },
 
   // Advertising
@@ -368,3 +384,7 @@ export const CATEGORY_ORDER: ConnectorCategory[] = [
   "analytics",
   "advertising",
 ];
+
+export function getConnectorById(id: string): Connector | undefined {
+  return CONNECTORS.find((c) => c.id === id);
+}
