@@ -1,12 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProviderById, shouldUseOpenRouter } from "@/lib/models";
+import { createClient } from "@/lib/supabase/server";
+import {
+  mcpListTools,
+  mcpCallTool,
+  toOpenAITools,
+  resolveToolCall,
+  McpConnection,
+  McpTool,
+} from "@/lib/mcp-client";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const MAX_TOOL_ROUNDS = 5;
+
+async function loadUserMcpConnections(
+  userId: string
+): Promise<McpConnection[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("user_connectors")
+    .select("connector_id, mcp_url, access_token, connected, provider")
+    .eq("user_id", userId)
+    .eq("connected", true);
+
+  if (error || !data) return [];
+
+  return data
+    .filter(
+      (r) =>
+        r.mcp_url &&
+        r.access_token &&
+        (r.provider === "mcp" || String(r.connector_id).startsWith("custom:"))
+    )
+    .map((r) => ({
+      connectorId: r.connector_id as string,
+      mcpUrl: r.mcp_url as string,
+      accessToken: r.access_token as string,
+    }));
+}
+
+async function gatherTools(
+  connections: McpConnection[]
+): Promise<{ tools: McpTool[]; openAITools: ReturnType<typeof toOpenAITools> }> {
+  const all: McpTool[] = [];
+  for (const conn of connections) {
+    try {
+      const listed = await mcpListTools(conn);
+      all.push(...listed);
+    } catch (e) {
+      console.warn(
+        `[chat] tools/list failed for ${conn.connectorId}:`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  return { tools: all, openAITools: toOpenAITools(all) };
+}
+
+function sseData(obj: unknown): string {
+  return `data: ${JSON.stringify(obj)}\n\n`;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, model, provider, stream = true, systemInstructions } = body;
+    const { messages, model, provider, stream = true, systemInstructions } =
+      body;
 
     if (!messages || !model || !provider) {
       return NextResponse.json(
@@ -33,6 +94,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Auth user → load MCP connectors
+    let connections: McpConnection[] = [];
+    let mcpTools: McpTool[] = [];
+    let openAITools: ReturnType<typeof toOpenAITools> = [];
+
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        connections = await loadUserMcpConnections(user.id);
+        if (connections.length > 0) {
+          const gathered = await gatherTools(connections);
+          mcpTools = gathered.tools;
+          openAITools = gathered.openAITools;
+        }
+      }
+    } catch (e) {
+      console.warn("[chat] connector load failed", e);
+    }
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -44,13 +127,29 @@ export async function POST(req: NextRequest) {
       headers["X-Title"] = "Multi AI Chat";
     }
 
-    const formattedMessages: { role: string; content: string }[] = [];
+    type ChatMsg = {
+      role: string;
+      content: string | null;
+      tool_calls?: unknown;
+      tool_call_id?: string;
+      name?: string;
+    };
 
+    const formattedMessages: ChatMsg[] = [];
+
+    let systemContent = "";
     if (systemInstructions && String(systemInstructions).trim()) {
-      formattedMessages.push({
-        role: "system",
-        content: String(systemInstructions).trim(),
-      });
+      systemContent = String(systemInstructions).trim();
+    }
+    if (openAITools.length > 0) {
+      systemContent +=
+        (systemContent ? "\n\n" : "") +
+        "You have access to external tools from the user's connected MCP connectors. " +
+        "Use them when the user asks for data or actions that tools can provide. " +
+        "After tool results, give a clear final answer.";
+    }
+    if (systemContent) {
+      formattedMessages.push({ role: "system", content: systemContent });
     }
 
     for (const m of messages) {
@@ -61,48 +160,211 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const payload: Record<string, unknown> = {
-      model,
-      messages: formattedMessages,
-      stream,
-      temperature: 0.7,
-      max_tokens: 4096,
-    };
+    const baseUrl = providerConfig.baseUrl;
 
-    const response = await fetch(`${providerConfig.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Provider error: ${response.status}`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage =
-          errorJson.error?.message || errorJson.message || errorText;
-      } catch {
-        errorMessage = errorText || errorMessage;
+    async function callModel(
+      msgs: ChatMsg[],
+      withTools: boolean,
+      doStream: boolean
+    ): Promise<Response> {
+      const payload: Record<string, unknown> = {
+        model,
+        messages: msgs,
+        stream: doStream,
+        temperature: 0.7,
+        max_tokens: 4096,
+      };
+      if (withTools && openAITools.length > 0) {
+        payload.tools = openAITools;
+        payload.tool_choice = "auto";
       }
-      return NextResponse.json(
-        { error: errorMessage },
-        { status: response.status }
-      );
-    }
 
-    if (stream) {
-      return new Response(response.body, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
+      return fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
       });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    // No tools → original streaming path
+    if (openAITools.length === 0) {
+      const response = await callModel(formattedMessages, false, stream);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `Provider error: ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage =
+            errorJson.error?.message || errorJson.message || errorText;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        return NextResponse.json(
+          { error: errorMessage },
+          { status: response.status }
+        );
+      }
+
+      if (stream) {
+        return new Response(response.body, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        });
+      }
+
+      const data = await response.json();
+      return NextResponse.json(data);
+    }
+
+    // ——— Tool-calling path ———
+    // Run non-stream rounds until no more tool_calls, then stream final text.
+    const workingMessages = [...formattedMessages];
+    let finalContent = "";
+    const toolTrace: string[] = [];
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const response = await callModel(workingMessages, true, false);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `Provider error: ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage =
+            errorJson.error?.message || errorJson.message || errorText;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        // If tools not supported by this model, fall back to plain stream
+        if (
+          /tool/i.test(errorMessage) ||
+          response.status === 400 ||
+          response.status === 422
+        ) {
+          console.warn("[chat] model may not support tools, falling back", errorMessage);
+          const fallback = await callModel(formattedMessages, false, true);
+          if (fallback.ok && fallback.body) {
+            return new Response(fallback.body, {
+              headers: {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                Connection: "keep-alive",
+              },
+            });
+          }
+        }
+        return NextResponse.json(
+          { error: errorMessage },
+          { status: response.status }
+        );
+      }
+
+      const data = await response.json();
+      const choice = data.choices?.[0];
+      const msg = choice?.message;
+
+      if (!msg) {
+        finalContent = "No response from model.";
+        break;
+      }
+
+      const toolCalls = msg.tool_calls as
+        | Array<{
+            id: string;
+            type?: string;
+            function?: { name: string; arguments: string };
+          }>
+        | undefined;
+
+      if (!toolCalls || toolCalls.length === 0) {
+        finalContent = msg.content || "";
+        break;
+      }
+
+      // Append assistant message with tool_calls
+      workingMessages.push({
+        role: "assistant",
+        content: msg.content || null,
+        tool_calls: toolCalls,
+      });
+
+      for (const tc of toolCalls) {
+        const fname = tc.function?.name || "";
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(tc.function?.arguments || "{}");
+        } catch {
+          args = {};
+        }
+
+        const resolved = resolveToolCall(fname, mcpTools, connections);
+        let resultText: string;
+
+        if (!resolved) {
+          resultText = `Unknown tool: ${fname}`;
+        } else {
+          try {
+            resultText = await mcpCallTool(
+              resolved.conn,
+              resolved.tool.name,
+              args
+            );
+            toolTrace.push(`✓ ${resolved.tool.name}`);
+          } catch (e) {
+            resultText =
+              e instanceof Error ? e.message : "Tool execution failed";
+            toolTrace.push(`✗ ${resolved.tool.name}: ${resultText}`);
+          }
+        }
+
+        workingMessages.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: resultText.slice(0, 50000),
+        });
+      }
+    }
+
+    // Stream final content as SSE so the existing frontend works
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      start(controller) {
+        // Optional status line about tools used
+        if (toolTrace.length > 0) {
+          const note = `*Used tools: ${toolTrace.join(", ")}*\n\n`;
+          const chunk = {
+            choices: [{ delta: { content: note } }],
+          };
+          controller.enqueue(encoder.encode(sseData(chunk)));
+        }
+
+        // Emit content in chunks for smoother UX
+        const text = finalContent || "(no content after tool use)";
+        const size = 80;
+        for (let i = 0; i < text.length; i += size) {
+          const piece = text.slice(i, i + size);
+          controller.enqueue(
+            encoder.encode(
+              sseData({ choices: [{ delta: { content: piece } }] })
+            )
+          );
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Internal server error";
