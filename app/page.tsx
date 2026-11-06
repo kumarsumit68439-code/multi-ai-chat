@@ -84,6 +84,21 @@ export default function Home() {
     });
   }, [user]);
 
+  // After custom MCP OAuth success or error
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("mcp_connected");
+    const mcpError = params.get("mcp_error");
+    if (!connected && !mcpError) return;
+
+    setSettingsOpen(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("mcp_connected");
+    url.searchParams.delete("mcp_error");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, []);
+
   const currentChat = chats.find((c) => c.id === currentChatId) || null;
   const messageCount = chats.reduce((n, c) => n + c.messages.length, 0);
 
