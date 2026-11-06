@@ -5,9 +5,74 @@ import { ProviderConfig, ModelInfo } from "@/types";
  * - Claude: no official free API (not listed)
  * - Hugging Face Inference: mostly paid in 2026 (not listed as free)
  * - Meta Llama: free via Groq + OpenRouter
+ * - Google Gemini: free tier via AI Studio (rate-limited)
  * - OpenRouter :free models update often — list reflects Nov 2026 live set
  */
 export const PROVIDERS: ProviderConfig[] = [
+  {
+    id: "gemini",
+    name: "Google Gemini (Free)",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    envKey: "GEMINI_API_KEY",
+    models: [
+      {
+        id: "gemini-3.8-flash",
+        name: "Gemini 3.8 Flash",
+        provider: "gemini",
+        free: true,
+        context: "1M",
+        description: "Google AI Studio free tier — main Flash",
+      },
+      {
+        id: "gemini-3.6-flash",
+        name: "Gemini 3.6 Flash",
+        provider: "gemini",
+        free: true,
+        context: "1M",
+        description: "Google AI Studio free tier",
+      },
+      {
+        id: "gemini-3.5-flash-lite",
+        name: "Gemini 3.5 Flash-Lite",
+        provider: "gemini",
+        free: true,
+        context: "1M",
+        description: "Faster free tier, higher rate limits",
+      },
+      {
+        id: "gemini-3.1-flash-lite",
+        name: "Gemini 3.1 Flash-Lite",
+        provider: "gemini",
+        free: true,
+        context: "1M",
+        description: "Free Flash-Lite",
+      },
+      {
+        id: "gemini-3-flash-preview",
+        name: "Gemini 3 Flash Preview",
+        provider: "gemini",
+        free: true,
+        context: "1M",
+        description: "Preview free on AI Studio",
+      },
+      {
+        id: "gemma-4-31b-it",
+        name: "Gemma 4 31B",
+        provider: "gemini",
+        free: true,
+        context: "256K",
+        description: "Open Gemma 4 via Google AI Studio free",
+      },
+      {
+        id: "gemma-4-26b-a4b-it",
+        name: "Gemma 4 26B A4B",
+        provider: "gemini",
+        free: true,
+        context: "256K",
+        description: "Gemma 4 MoE free",
+      },
+    ],
+  },
   {
     id: "groq",
     name: "Groq",
@@ -299,11 +364,15 @@ export function getFreeModels(): ModelInfo[] {
 }
 
 /**
- * Meta free models use Groq endpoint + GROQ_API_KEY.
- * Other free models under deepseek/kimi/xai would use OpenRouter if any remain.
+ * Meta free models use Groq. Gemini uses Google AI Studio directly.
  */
 export function shouldUseOpenRouter(provider: string, modelId: string): boolean {
-  if (provider === "openrouter" || provider === "groq" || provider === "meta") {
+  if (
+    provider === "openrouter" ||
+    provider === "groq" ||
+    provider === "meta" ||
+    provider === "gemini"
+  ) {
     return false;
   }
   const model = getModelById(modelId);
