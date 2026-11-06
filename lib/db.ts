@@ -148,6 +148,7 @@ export interface UserConnector {
   connected: boolean;
   provider?: string;
   scopes?: string[];
+  mcp_url?: string;
   updated_at?: string;
 }
 
@@ -159,6 +160,11 @@ export interface UserConnector {
  *   connected boolean default false,
  *   provider text,
  *   scopes text[],
+ *   mcp_url text,
+ *   access_token text,
+ *   refresh_token text,
+ *   token_expires_at timestamptz,
+ *   client_id text,
  *   updated_at timestamptz default now(),
  *   primary key (user_id, connector_id)
  * )
@@ -169,7 +175,7 @@ export async function fetchUserConnectors(
   const supabase = createClient();
   const { data, error } = await supabase
     .from("user_connectors")
-    .select("connector_id, connected, provider, scopes, updated_at")
+    .select("connector_id, connected, provider, scopes, mcp_url, updated_at")
     .eq("user_id", userId);
 
   if (error || !data) return {};
@@ -181,6 +187,7 @@ export async function fetchUserConnectors(
       connected: !!row.connected,
       provider: row.provider ?? undefined,
       scopes: row.scopes ?? undefined,
+      mcp_url: row.mcp_url ?? undefined,
       updated_at: row.updated_at ?? undefined,
     };
   }
@@ -191,7 +198,11 @@ export async function setConnectorStatus(
   userId: string,
   connectorId: string,
   connected: boolean,
-  extra?: { provider?: string; scopes?: string[] }
+  extra?: {
+    provider?: string;
+    scopes?: string[];
+    mcp_url?: string;
+  }
 ): Promise<boolean> {
   const supabase = createClient();
   const { error } = await supabase.from("user_connectors").upsert(
@@ -201,6 +212,7 @@ export async function setConnectorStatus(
       connected,
       provider: extra?.provider ?? null,
       scopes: extra?.scopes ?? null,
+      mcp_url: extra?.mcp_url ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,connector_id" }
