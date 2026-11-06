@@ -14,7 +14,8 @@ A modern multi-provider AI chat application built with Next.js. Supports free an
 - Streaming responses
 - Model selector with free/paid indicators
 - Settings (Models, Instructions, **Connectors**, Account, Usage, Customize)
-- **Connectors** – Gmail, Google Calendar, Google Drive, Vercel, Notion, and many more (UI + status via Supabase; Google services use Supabase Google OAuth with extra scopes)
+- **Connectors** – Gmail, Google Calendar, Google Drive, GitHub, Vercel, Notion, and many more
+- **Custom MCP** – paste any MCP server URL + name → real OAuth 2.1 authorize flow (same pattern as Claude / ChatGPT custom connectors)
 - Responsive design (mobile + desktop)
 - Dark theme
 
@@ -34,11 +35,13 @@ Add the following in your Vercel project → Settings → Environment Variables:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL          | Auth + data           |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key          | Auth + data           |
 
-Optional: `NEXT_PUBLIC_SITE_URL` for OpenRouter referer header.
+Optional: `NEXT_PUBLIC_SITE_URL` (your production URL, used for OAuth redirect URIs).
+
+**Important:** Both Supabase variables must be set in Vercel, otherwise the build fails with `@supabase/ssr: Your project's URL and API key are required`.
 
 ### 2. Supabase – user_connectors table
 
-Run this SQL in the Supabase SQL Editor so connector status can be saved:
+Run this SQL in the Supabase SQL Editor:
 
 ```sql
 create table if not exists public.user_connectors (
@@ -47,6 +50,11 @@ create table if not exists public.user_connectors (
   connected boolean not null default false,
   provider text,
   scopes text[],
+  mcp_url text,
+  access_token text,
+  refresh_token text,
+  token_expires_at timestamptz,
+  client_id text,
   updated_at timestamptz not null default now(),
   primary key (user_id, connector_id)
 );
@@ -58,6 +66,13 @@ create policy "Users can manage own connectors"
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- If the table already exists, add the new columns:
+alter table public.user_connectors add column if not exists mcp_url text;
+alter table public.user_connectors add column if not exists access_token text;
+alter table public.user_connectors add column if not exists refresh_token text;
+alter table public.user_connectors add column if not exists token_expires_at timestamptz;
+alter table public.user_connectors add column if not exists client_id text;
 ```
 
 ### 3. Google OAuth (for Gmail / Calendar / Drive / BigQuery connectors)
@@ -68,12 +83,22 @@ create policy "Users can manage own connectors"
 4. In Google Cloud → OAuth consent screen, add the scopes you need (Gmail, Calendar, Drive, etc.).
 5. When user clicks **Connect** on Gmail / Google Calendar / Google Drive / BigQuery, the app requests those scopes via Supabase `signInWithOAuth` with `access_type=offline` and `prompt=consent`.
 
-### 4. Get Free API Keys
+### 4. Custom MCP OAuth
+
+1. Open **Settings → Connectors → Custom MCP → Add**.
+2. Enter a name and the MCP server URL (must be `https://`).
+3. Click **Connect with OAuth**.
+4. The app discovers the server’s OAuth 2.1 metadata (protected resource + authorization server), generates PKCE, and redirects the browser to the real authorize page.
+5. After you approve, tokens are stored and the connector shows as connected.
+
+Only MCP servers that implement the official MCP Authorization spec (OAuth 2.1 + PKCE) are supported — the same requirement Claude and ChatGPT use for custom connectors.
+
+### 5. Get Free API Keys
 
 - **Groq**: https://console.groq.com (no credit card required for free tier)
 - **OpenRouter**: https://openrouter.ai (free models available without balance)
 
-### 5. Deploy
+### 6. Deploy
 
 Push to GitHub and import the repository in Vercel, or use the linked project.
 
@@ -87,15 +112,16 @@ npm run dev
 Settings → **Connectors** tab includes:
 
 - Search
-- Custom (placeholder)
+- **Custom MCP** (real OAuth 2.1 flow)
 - Featured: Finance, Gmail, Google Calendar, Google Drive, Box, Canva, Notion, Shopify, Stripe, Vercel, Wix
 - Productivity: Outlook, Asana, Calendly, ClickUp, Figma, Linear, Teams, RingCentral, Whop, …
 - Finance: Coinbase, Robinhood, IBKR, Webull, X Money, …
 - Developer: GitHub, Netlify, Supabase, MongoDB, Datadog, …
 - Sales, Social, Analytics, Advertising
 
-**Google connectors** use real Supabase Google OAuth + extra scopes.  
-Other connectors currently save connection status (scaffolding); full OAuth + MCP tool execution for each service requires that service’s own OAuth app and backend tool handlers.
+**Google / GitHub / Microsoft** use real Supabase OAuth.  
+**Custom MCP** uses real discovery + PKCE + authorize redirect.  
+Tool execution (calling the MCP tools from chat) can be wired next once tokens are stored.
 
 ## Models
 
