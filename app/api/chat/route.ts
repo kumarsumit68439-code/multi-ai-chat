@@ -94,10 +94,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Auth user → load MCP connectors
-    let connections: McpConnection[] = [];
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    };
+
+    if (effectiveProvider === "openrouter") {
+      headers["HTTP-Referer"] =
+        process.env.NEXT_PUBLIC_SITE_URL || "https://axiom-ai-sand.vercel.app";
+      headers["X-Title"] = "Multi AI Chat";
+    }
+
+    // Load MCP tools for logged-in user (optional)
     let mcpTools: McpTool[] = [];
     let openAITools: ReturnType<typeof toOpenAITools> = [];
+    let connections: McpConnection[] = [];
 
     try {
       const supabase = await createClient();
@@ -114,17 +125,6 @@ export async function POST(req: NextRequest) {
       }
     } catch (e) {
       console.warn("[chat] connector load failed", e);
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    };
-
-    if (effectiveProvider === "openrouter") {
-      headers["HTTP-Referer"] =
-        process.env.NEXT_PUBLIC_SITE_URL || "https://multi-ai-chat.vercel.app";
-      headers["X-Title"] = "Multi AI Chat";
     }
 
     type ChatMsg = {
@@ -162,11 +162,12 @@ export async function POST(req: NextRequest) {
 
     const baseUrl = providerConfig.baseUrl;
 
-    async function callModel(
+    // Arrow function — valid in strict mode / ES5 target blocks
+    const callModel = async (
       msgs: ChatMsg[],
       withTools: boolean,
       doStream: boolean
-    ): Promise<Response> {
+    ): Promise<Response> => {
       const payload: Record<string, unknown> = {
         model,
         messages: msgs,
@@ -184,7 +185,7 @@ export async function POST(req: NextRequest) {
         headers,
         body: JSON.stringify(payload),
       });
-    }
+    };
 
     // No tools → original streaming path
     if (openAITools.length === 0) {
@@ -220,9 +221,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data);
     }
 
-    // ——— Tool-calling path ———
-    // Run non-stream rounds until no more tool_calls, then stream final text.
-    const workingMessages = [...formattedMessages];
+    // Tool-calling loop (non-stream intermediate rounds, then stream final text)
+    let workingMessages = [...formattedMessages];
     let finalContent = "";
     const toolTrace: string[] = [];
 
@@ -239,24 +239,6 @@ export async function POST(req: NextRequest) {
         } catch {
           errorMessage = errorText || errorMessage;
         }
-        // If tools not supported by this model, fall back to plain stream
-        if (
-          /tool/i.test(errorMessage) ||
-          response.status === 400 ||
-          response.status === 422
-        ) {
-          console.warn("[chat] model may not support tools, falling back", errorMessage);
-          const fallback = await callModel(formattedMessages, false, true);
-          if (fallback.ok && fallback.body) {
-            return new Response(fallback.body, {
-              headers: {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                Connection: "keep-alive",
-              },
-            });
-          }
-        }
         return NextResponse.json(
           { error: errorMessage },
           { status: response.status }
@@ -268,16 +250,16 @@ export async function POST(req: NextRequest) {
       const msg = choice?.message;
 
       if (!msg) {
-        finalContent = "No response from model.";
+        finalContent = "(empty model response)";
         break;
       }
 
       const toolCalls = msg.tool_calls as
-        | Array<{
+        | {
             id: string;
             type?: string;
-            function?: { name: string; arguments: string };
-          }>
+            function?: { name?: string; arguments?: string };
+          }[]
         | undefined;
 
       if (!toolCalls || toolCalls.length === 0) {
@@ -285,7 +267,6 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // Append assistant message with tool_calls
       workingMessages.push({
         role: "assistant",
         content: msg.content || null,
@@ -333,7 +314,6 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       start(controller) {
-        // Optional status line about tools used
         if (toolTrace.length > 0) {
           const note = `*Used tools: ${toolTrace.join(", ")}*\n\n`;
           const chunk = {
@@ -342,7 +322,6 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(sseData(chunk)));
         }
 
-        // Emit content in chunks for smoother UX
         const text = finalContent || "(no content after tool use)";
         const size = 80;
         for (let i = 0; i < text.length; i += size) {
